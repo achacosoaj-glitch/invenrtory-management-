@@ -67,6 +67,45 @@ php artisan serve
 
 The API base URL is `http://127.0.0.1:8000`. Laravel's `/up` health route is available for a basic application check.
 
+## Deploy to Vercel
+
+This repository includes a Vercel Container deployment using FrankenPHP and Caddy. Vercel's current Laravel guidance uses containers; this deployment does not use the older community PHP runtime. The container includes PHP 8.4 and `pdo_mysql`, serves only the Laravel `public` directory, and gets secrets from Vercel environment variables. The container filesystem is ephemeral, so the MySQL database must be hosted separately and reachable from Vercel.
+
+### Connect the GitHub repository
+
+1. Push this repository to GitHub and sign in to [Vercel](https://vercel.com).
+2. Select **Add New → Project**, import `achacosoaj-glitch/invenrtory-management-`, and keep the project root set to `.`.
+3. Vercel should detect the root `Dockerfile` and use the Container runtime. Keep the included [`vercel.json`](./vercel.json) configuration.
+4. In **Project Settings → Environment Variables**, set the variables below for Production and Preview as appropriate.
+5. Deploy from the Vercel dashboard. Subsequent pushes to the connected branch trigger deployments.
+
+Required Vercel environment variables:
+
+| Variable | Value |
+|---|---|
+| `APP_KEY` | A stable Laravel key generated with `php artisan key:generate --show` |
+| `APP_URL` | The deployed Vercel production URL, e.g. `https://your-project.vercel.app` |
+| `DB_CONNECTION` | `mysql` |
+| `DB_HOST` | Hostname of your externally hosted MySQL database |
+| `DB_PORT` | MySQL port, usually `3306` |
+| `DB_DATABASE` | `inventory_management_db` |
+| `DB_USERNAME` | Database user with required schema privileges |
+| `DB_PASSWORD` | Database password |
+
+Never put production credentials or `APP_KEY` in Git or in `vercel.json`. Do not use `127.0.0.1` for `DB_HOST` in Vercel; that would point to the application container, not your database. Use a provider that allows secure connections from Vercel and supports MySQL. Create the database and apply the four `database/sql` scripts from your local machine or a trusted database client before sending API requests. Do not run these non-idempotent schema scripts on each container startup.
+
+Generate a key locally without modifying the committed example configuration:
+
+```powershell
+php artisan key:generate --show
+```
+
+Add the resulting `base64:...` value to the Vercel `APP_KEY` environment variable. Use a different stable key for Preview if needed. Vercel container storage is not persistent; this API stores business data in MySQL and does not rely on local uploads or file sessions.
+
+After deployment, verify `https://your-project.vercel.app/health` returns `{"status":"ok"}`, then update the Postman collection's `baseUrl` to the deployment URL and test the API. A successful health response confirms the app is running, not that MySQL credentials or SQL routines are configured; verify with `/api/products`.
+
+For local Docker/Vercel CLI testing, install Docker Desktop and the Vercel CLI, sign in, and link the project. Set the required environment variables for local container execution, then run `vercel dev`. Deploy with `vercel deploy --prod` or let the connected Git repository deploy automatically.
+
 ## API endpoints
 
 | Method | Endpoint | Purpose |

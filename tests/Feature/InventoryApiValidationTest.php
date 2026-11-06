@@ -6,6 +6,13 @@ use Tests\TestCase;
 
 class InventoryApiValidationTest extends TestCase
 {
+    public function test_health_endpoint_returns_ok(): void
+    {
+        $this->getJson('/health')
+            ->assertOk()
+            ->assertJsonPath('status', 'ok');
+    }
+
     public function test_sale_rejects_a_negative_quantity_before_calling_mysql(): void
     {
         $response = $this->postJson('/api/procedures/create-sale', [

@@ -8,3 +8,7 @@ Route::get('/', function () {
         'api' => '/api',
     ]);
 });
+
+Route::get('/health', function () {
+    return response()->json(['status' => 'ok']);
+});
