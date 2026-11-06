@@ -1,0 +1,94 @@
+{
+  "info": {
+    "_postman_id": "bd0c864c-7423-46ce-a0eb-c7467a6bb2cd",
+    "name": "Inventory Management API",
+    "description": "Laravel API backed by real MySQL functions and stored procedures. Run the successful sale before the cancellation requests. Sample IDs are seeded by database/sql/02_insert_sample_data.sql.\n\nSuccess response example: {\"message\":\"Sale created.\",\"data\":{\"sale_id\":1,\"total_amount\":\"3.00\",\"sale_status\":\"COMPLETED\"}}\n\nValidation error example (422): {\"message\":\"The given data was invalid.\",\"errors\":{\"quantity\":[\"The quantity field must be at least 1.\"]}}\n\nDatabase business-rule error example (422): {\"message\":\"Insufficient stock\"}",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:8000" },
+    { "key": "productId", "value": "1" },
+    { "key": "customerId", "value": "1" },
+    { "key": "saleId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "Get all products",
+      "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{baseUrl}}/api/products", "description": "Success: 200 with {\"data\":[...]}. Error example: 500 with {\"message\":\"A database error prevented the operation.\"} if the database is unavailable." },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Products are returned', function () { pm.response.to.have.status(200); pm.expect(pm.response.json()).to.have.property('data'); });"] } }],
+      "response": []
+    },
+    {
+      "name": "Get product details",
+      "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{baseUrl}}/api/products/{{productId}}", "description": "Success: 200 with {\"data\":{\"id\":1,\"sku\":\"BEV-001\",...}}. Not-found example: 404 with {\"message\":\"Product not found.\"}." },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Product details are returned', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data).to.have.property('sku'); });"] } }],
+      "response": []
+    },
+    {
+      "name": "Calculate sale total - SQL Function",
+      "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{baseUrl}}/api/functions/calculate-sale-total?product_id={{productId}}&quantity=2", "description": "Success: 200 with {\"product_id\":1,\"quantity\":2,\"subtotal\":\"3.00\"}. Validation failure: 422 with {\"message\":\"The given data was invalid.\",\"errors\":{...}}." },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('SQL function calculates subtotal', function () { pm.response.to.have.status(200); pm.expect(Number(pm.response.json().subtotal)).to.eql(3); });"] } }],
+      "response": []
+    },
+    {
+      "name": "Get product stock status - SQL Function",
+      "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{baseUrl}}/api/functions/product-stock-status/{{productId}}", "description": "Success: 200 with {\"product_id\":1,\"stock_status\":\"IN STOCK\"}. Not-found example: 404 with {\"message\":\"Product not found.\"}." },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('SQL function returns a stock status', function () { pm.response.to.have.status(200); pm.expect(['IN STOCK', 'LOW STOCK', 'OUT OF STOCK']).to.include(pm.response.json().stock_status); });"] } }],
+      "response": []
+    },
+    {
+      "name": "Create successful sale - Stored Procedure",
+      "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"customer_id\": 1,\n  \"product_id\": 1,\n  \"quantity\": 2\n}" }, "url": "{{baseUrl}}/api/procedures/create-sale", "description": "Success: 201 with sale_id, total_amount, and COMPLETED status. Insufficient stock failure: 422 with {\"message\":\"Insufficient stock\"}. Test saves the created sale_id for cancellation." },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Sale is created', function () { pm.response.to.have.status(201); var body = pm.response.json(); pm.expect(body.data).to.have.property('sale_id'); pm.collectionVariables.set('saleId', body.data.sale_id); });"] } }],
+      "response": []
+    },
+    {
+      "name": "Add product stock - Stored Procedure",
+      "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"product_id\": 1,\n  \"quantity\": 5,\n  \"remarks\": \"Postman replenishment\"\n}" }, "url": "{{baseUrl}}/api/procedures/add-stock", "description": "Success: 200 with previous_stock and updated stock_quantity. Invalid quantity failure: 422 with validation errors." },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Stock is increased', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data).to.have.property('stock_quantity'); });"] } }],
+      "response": []
+    },
+    {
+      "name": "Cancel sale - Stored Procedure",
+      "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"sale_id\": {{saleId}}\n}" }, "url": "{{baseUrl}}/api/procedures/cancel-sale", "description": "Run after Create successful sale. Success: 200 with CANCELLED status and stock restored. Repeating cancellation returns 422 with {\"message\":\"Sale is already cancelled\"}." },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Sale is cancelled', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data.sale_status).to.eql('CANCELLED'); });"] } }],
+      "response": []
+    },
+    {
+      "name": "Reject sale with insufficient stock",
+      "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"customer_id\": 1,\n  \"product_id\": 1,\n  \"quantity\": 999999\n}" }, "url": "{{baseUrl}}/api/procedures/create-sale", "description": "Expected failure: 422 with {\"message\":\"Insufficient stock\"}; the procedure rolls back and the sale, sale_items, stock, and movements remain unchanged. Successful control example is the Create successful sale request (201)."},
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Insufficient stock is rejected', function () { pm.response.to.have.status(422); pm.expect(pm.response.json().message).to.include('Insufficient stock'); });"] } }],
+      "response": []
+    },
+    {
+      "name": "Reject sale with invalid quantity",
+      "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"customer_id\": 1,\n  \"product_id\": 1,\n  \"quantity\": -2\n}" }, "url": "{{baseUrl}}/api/procedures/create-sale", "description": "Expected failure: 422 with {\"message\":\"The given data was invalid.\",\"errors\":{...}}. The SQL procedure also rejects non-positive quantities if called directly." },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Negative quantity is rejected', function () { pm.response.to.have.status(422); pm.expect(pm.response.json()).to.have.property('errors'); });"] } }],
+      "response": []
+    },
+    {
+      "name": "Reject duplicate sale cancellation",
+      "request": { "method": "POST", "header": [{ "key": "Accept", "value": "application/json" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"sale_id\": {{saleId}}\n}" }, "url": "{{baseUrl}}/api/procedures/cancel-sale", "description": "Run after Cancel sale. Expected failure: 422 with {\"message\":\"Sale is already cancelled\"}; no second stock restoration is made." },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Duplicate cancellation is rejected', function () { pm.response.to.have.status(422); pm.expect(pm.response.json().message).to.include('already cancelled'); });"] } }],
+      "response": []
+    },
+    {
+      "name": "Verify inventory",
+      "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{baseUrl}}/api/reports/inventory", "description": "Success: 200 with product stock and status computed through fn_get_product_stock_status. Database error example: 500 with {\"message\":\"A database error prevented the operation.\"}." },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Inventory report includes database stock status', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data[0]).to.have.property('stock_status'); });"] } }],
+      "response": []
+    },
+    {
+      "name": "Verify stock movement records",
+      "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{baseUrl}}/api/reports/stock-movements", "description": "Success: 200 with stock movement history (opening stock, sales, replenishments, and cancellations). Database error example: 500 with a consistent JSON message." },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Stock movement report is returned', function () { pm.response.to.have.status(200); pm.expect(pm.response.json()).to.have.property('data'); });"] } }],
+      "response": []
+    },
+    {
+      "name": "Verify sales records",
+      "request": { "method": "GET", "header": [{ "key": "Accept", "value": "application/json" }], "url": "{{baseUrl}}/api/reports/sales", "description": "Success: 200 with sales, item line counts, customer names, and status. Database error example: 500 with a consistent JSON message." },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Sales report is returned', function () { pm.response.to.have.status(200); pm.expect(pm.response.json()).to.have.property('data'); });"] } }],
+      "response": []
+    }
+  ]
+}
